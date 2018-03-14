@@ -1,0 +1,7 @@
+#rename this file to .env in the script directory and remove this comment
+APIKEY=buhrXXXXXXXXXXXXXXXX
+ZWIFTUSERNAME=XXX@XXXxxxx.com
+ZWIFTPASSWORD=xxxxxx
+ZWIFTID=1010
+STATUSFILE=/path/to/your/script/directory/riding.status
+TARGETHR=140
