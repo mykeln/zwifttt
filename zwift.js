@@ -6,6 +6,7 @@ var username = process.env.ZWIFTUSERNAME;
 var password = process.env.ZWIFTPASSWORD;
 var playerId = process.env.ZWIFTID;
 var statusFile = process.env.STATUSFILE;
+var targetHr = process.env.TARGETHR;
 
 // requiring zwift api
 var ZwiftAccount = require("zwift-mobile-api");
@@ -23,54 +24,64 @@ var account = new ZwiftAccount(username, password);
 // it's always world1, regardless of the one currently running in zwift. shrug.
 var world = account.getWorld(1);
 
-// Get profile for "me"
+// Get profile for the user from the zwift rider
 account.getProfile().profile().then(p => {
-    console.log(p.riding);  // JSON of rider profile (includes id property you can use below)
-
+    // is the rider riding?
     if(p.riding == true){
-      // if riding, check to see if fan has already fired
+      // if riding, check to see if fan has already been turned on in this session
       fs.exists(statusFile, function (exists) {
         if(exists){
-          console.log('already told fan to turn on. exiting.');
+          console.log('already told fan to turn on. skipping this round.');
           exit;
         } else {
-          fs.writeFile(statusFile, {flag: 'wx'}, function (err, data){})
+          // Get the status of the specified rider
+          // (includes x,y position, speed, power, etc)
+          world.riderStatus(playerId).then(status => {
 
-      // Get the status of the specified rider
-      // (includes x,y position, speed, power, etc)
-      world.riderStatus(playerId).then(status => {
-        var rider_hr = status.heartrate;
+          // we're interested in the heart rate, though
+          var rider_hr = status.heartrate;
+          console.log(rider_hr);
 
-        console.log(rider_hr); // heart rate of rider
+          // if rider heartrate is over the specified target
+          if(rider_hr >= targetHr){
+            console.log('hr over threshold (' + rider_hr + ' > ' + targetHr + ')');
+          
+            // send fan_on event to ifttt, which will tell a smart outlet to turn on (which should trigger a fan)
+            IFTTTMaker.send('fan_on').then(function () {
+              console.log('fan_on request was sent');
+      
+              // writing status file, which prevents the script from hammering ifttt. it does it once.
+              fs.writeFile(statusFile, {flag: 'wx'}, function (err, data){})
+              }).catch(function (error) {
+                console.log('fan_on request could not be sent:', error);
+              });
+	    }
+          });
+        }
+      });
+    } else { // is the rider not riding?
+      console.log('the rider is not riding, bub');
 
-        // if rider heartrate is over 140bpm...
-        if(rider_hr >= 140){
-          console.log('hr over 140');
+      // does the status file exist?
+      fs.stat(statusFile, function (err, stats) {
+        // if it can't check, return the error
+        if (err) return console.log("couldn't check status file" + err);
 
-          // send 150_bpm event to ifttt, which will tell a smart outlet to turn on (which should trigger a fan)
-          // the trigger is named 150_bpm but i have it triggering at 140 which seems better
-          IFTTTMaker.send('150_bpm').then(function () {
-            console.log('Request was sent');
+        // the rider is not riding, but the status file exists?
+        // that must mean the rider JUST stopped
+
+        // delete the status file
+        fs.unlink(statusFile,function(err){
+          if(err) return console.log("couldn't delete status file" + err);
+
+          console.log('no longer riding, so deleting file. deleted successfully');
+
+          // if the status file successfully deleted, send the fan_off command to ifttt
+          IFTTTMaker.send('fan_off').then(function () {
+            console.log('fan-off request was sent');
           }).catch(function (error) {
             console.log('The request could not be sent:', error);
           });
-	}
-      });
-        }
-      });
-    } else {
-      console.log('not riding, bub');
-      fs.stat(statusFile, function (err, stats) {
-        console.log(stats); // all information of file in stats variable
-
-        if (err) {
-          return console.error(err);
-        }
-
-        fs.unlink(statusFile,function(err){
-          if(err) return console.log(err);
-
-          console.log('no longer riding, so deleting file. deleted successfully');
         });  
       });
     }
