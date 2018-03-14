@@ -1,0 +1,2 @@
+the rider is not riding, bub
+couldn't check status fileError: ENOENT: no such file or directory, stat '/var/www/wakerlabs/zwiftfan/riding.status'
